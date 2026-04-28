@@ -1,0 +1,175 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>SEOトピック管理マップ</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700&family=Zen+Maru+Gothic:wght@400;500;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="./styles.css">
+</head>
+<body>
+  <div class="app-shell">
+    <aside class="sidebar">
+      <section class="brand-card">
+        <p class="eyebrow">Topic Planning</p>
+        <h1>SEOトピック管理マップ</h1>
+        <p class="lead">SEOテーマごとにフォルダとマップを分けながら、関連トピックを構造化して管理できます。</p>
+      </section>
+
+      <section class="panel">
+        <h2>オンライン共有</h2>
+        <p id="auth-status" class="meta-line">未ログイン</p>
+        <label class="field">
+          <span>メールアドレス</span>
+          <input id="auth-email-input" type="email" placeholder="name@example.com">
+        </label>
+        <div class="button-row auth-actions">
+          <button id="login-btn" class="primary">ログインリンク送信</button>
+          <button id="logout-btn">ログアウト</button>
+        </div>
+      </section>
+
+      <section class="panel">
+        <h2>フォルダとマップ</h2>
+        <label class="field">
+          <span>フォルダ名</span>
+          <input id="folder-name-input" type="text" placeholder="フォルダ名を入力">
+        </label>
+        <div class="button-row">
+          <button id="new-folder-btn" class="primary">新規フォルダ</button>
+          <button id="duplicate-folder-btn">フォルダを複製</button>
+          <button id="delete-folder-btn" class="danger">フォルダを削除</button>
+        </div>
+        <div id="folder-list" class="selection-list"></div>
+
+        <label class="field">
+          <span>マップ名</span>
+          <input id="map-name-input" type="text" placeholder="マップ名を入力">
+        </label>
+        <div class="button-row">
+          <button id="new-map-btn" class="primary">新規マップ</button>
+          <button id="duplicate-map-btn">マップを複製</button>
+          <button id="delete-map-btn" class="danger">マップを削除</button>
+        </div>
+        <div id="map-list" class="selection-list"></div>
+      </section>
+
+      <section class="panel">
+        <h2>操作</h2>
+        <div class="button-grid">
+          <button id="add-root-btn" class="primary">ルートを追加</button>
+          <button id="add-child-btn">子ノードを追加</button>
+          <button id="duplicate-node-btn">選択ノードを複製</button>
+          <button id="disconnect-node-btn">接続を外す</button>
+          <button id="delete-node-btn" class="danger">選択ノードを削除</button>
+          <button id="center-view-btn">表示を整える</button>
+          <button id="save-online-btn">オンライン保存</button>
+          <button id="load-online-btn">オンライン読込</button>
+          <button id="share-online-btn">共有リンク</button>
+          <button id="export-png-btn">PNGを書き出し</button>
+          <button id="export-btn">JSONを書き出し</button>
+          <label class="import-button">
+            JSONを読み込む
+            <input id="import-input" type="file" accept="application/json">
+          </label>
+        </div>
+      </section>
+
+      <section class="panel">
+        <h2>選択中ノード</h2>
+        <p id="parent-node-display" class="meta-line">親ノード: なし</p>
+        <p id="child-node-display" class="meta-line">子ノード数: 0</p>
+        <label class="field">
+          <span>タイトル</span>
+          <input id="node-title-input" type="text" placeholder="ノード名を入力">
+        </label>
+        <label class="field">
+          <span>メモ</span>
+          <textarea id="node-note-input" rows="5" placeholder="補足メモを書けます"></textarea>
+        </label>
+        <label class="field">
+          <span>色</span>
+          <input id="node-color-input" type="color" value="#ffb347">
+        </label>
+        <label class="field">
+          <span>リンク</span>
+          <input id="node-link-input" type="url" placeholder="https://example.com">
+        </label>
+
+        <div class="category-block">
+          <div class="category-header">
+            <h3>カテゴリー</h3>
+            <p id="category-selection-note" class="helper-note">選択ノードに割り当てます</p>
+          </div>
+          <div id="node-category-list" class="tag-cloud"></div>
+          <div class="category-header category-header--secondary">
+            <h3>カテゴリー管理</h3>
+            <p id="category-editor-note" class="helper-note">一覧から選ぶと編集できます</p>
+          </div>
+          <div id="category-manager-list" class="selection-list compact-list"></div>
+          <div class="category-editor">
+            <input id="category-name-input" type="text" placeholder="新しいカテゴリー名">
+            <div class="category-editor__actions">
+              <input id="category-color-input" type="color" value="#5ca878">
+              <button id="add-category-btn" type="button">追加</button>
+              <button id="save-category-btn" type="button">更新</button>
+              <button id="delete-category-btn" type="button" class="danger">削除</button>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="panel tips">
+        <h2>ヒント</h2>
+        <ul>
+          <li>何もない場所をドラッグすると、囲んだノードを複数選択できます。</li>
+          <li>Shift を押しながら空白をドラッグすると、既存選択に追加できます。</li>
+          <li>複数選択したままドラッグすると、まとめて移動できます。</li>
+          <li>右下の接続ハンドルからドラッグすると、親から子へ向かう線を作れます。</li>
+          <li>ノードを線の上へドラッグして離すと、中間ノードとして差し込まれます。</li>
+          <li>表示を整えると、深度ごとにそろえて重なりを避けながら自動整列します。</li>
+          <li>ノードを選んで Enter を押すと、そのノードへズームします。</li>
+          <li>Space を押しながらドラッグすると、キャンバスを移動できます。</li>
+          <li>Ctrl+Z で戻し、Ctrl+Y または Ctrl+Shift+Z でやり直せます。</li>
+        </ul>
+      </section>
+    </aside>
+
+    <main class="workspace">
+      <header class="workspace-toolbar">
+        <div>
+          <p class="eyebrow">Active Map</p>
+          <h2 id="workspace-title">SEOトピック管理マップ</h2>
+        </div>
+        <div class="status-pills">
+          <span id="selection-status" class="pill">未選択</span>
+          <span id="save-status" class="pill subtle">保存待ち</span>
+        </div>
+      </header>
+
+      <section id="canvas-shell" class="canvas-shell">
+        <div id="canvas-content" class="canvas-content">
+          <svg id="connections" class="connections" aria-hidden="true"></svg>
+          <div id="nodes-layer" class="nodes-layer"></div>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <template id="node-template">
+    <article class="node-card" role="button" tabindex="0">
+      <div class="node-card__accent"></div>
+      <button class="node-card__connector" type="button" aria-label="このノードから接続"></button>
+      <h3 class="node-card__title"></h3>
+      <div class="node-card__categories"></div>
+      <p class="node-card__note"></p>
+      <a class="node-card__link" target="_blank" rel="noopener noreferrer">リンクを開く</a>
+    </article>
+  </template>
+
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="./app.js"></script>
+</body>
+</html>
