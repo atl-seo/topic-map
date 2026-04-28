@@ -920,12 +920,42 @@ function renderOnlineAccessState() {
 
   if (!isWorkspaceUnlocked) {
     elements.selectionStatus.textContent = "未選択";
+    return;
   }
+
+  elements.addCategoryButton.disabled = false;
+  elements.categoryNameInput.disabled = false;
+  elements.categoryColorInput.disabled = false;
 }
 
 function renderWorkspaceManager() {
   const folder = getActiveFolder();
   const map = getActiveMap();
+
+  if (!state.user) {
+    elements.folderNameInput.value = "";
+    elements.mapNameInput.value = "";
+    elements.folderNameInput.disabled = true;
+    elements.mapNameInput.disabled = true;
+    elements.newFolderButton.disabled = true;
+    elements.duplicateFolderButton.disabled = true;
+    elements.deleteFolderButton.disabled = true;
+    elements.newMapButton.disabled = true;
+    elements.duplicateMapButton.disabled = true;
+    elements.deleteMapButton.disabled = true;
+    elements.folderList.innerHTML = `<span class="helper-note">ログイン後に表示します</span>`;
+    elements.mapList.innerHTML = `<span class="helper-note">ログイン後に表示します</span>`;
+    return;
+  }
+
+  elements.folderNameInput.disabled = false;
+  elements.mapNameInput.disabled = false;
+  elements.newFolderButton.disabled = false;
+  elements.duplicateFolderButton.disabled = false;
+  elements.deleteFolderButton.disabled = false;
+  elements.newMapButton.disabled = false;
+  elements.duplicateMapButton.disabled = false;
+  elements.deleteMapButton.disabled = false;
 
   elements.folderNameInput.value = folder?.name ?? "";
   elements.mapNameInput.value = map?.name ?? "";
@@ -1115,6 +1145,12 @@ function renderInspector() {
   const selectedNodes = getSelectedNodes();
   const primaryNode = getPrimarySelectedNode();
   const editingCategory = map?.categories.find((category) => category.id === state.categoryEditorId) ?? null;
+
+  if (!state.user) {
+    renderLockedInspector();
+    return;
+  }
+
   const hasSelection = selectedNodes.length > 0;
   const isSingleSelection = selectedNodes.length === 1;
   const anyConnected = selectedNodes.some((node) => node.parentId);
@@ -1172,6 +1208,34 @@ function renderInspector() {
   renderCategoryChips(selectedNodes);
   renderCategoryManagerList(map, editingCategory);
   syncCategoryEditor(editingCategory);
+}
+
+function renderLockedInspector() {
+  elements.addChildButton.disabled = true;
+  elements.duplicateNodeButton.disabled = true;
+  elements.disconnectNodeButton.disabled = true;
+  elements.deleteNodeButton.disabled = true;
+  elements.nodeTitleInput.disabled = true;
+  elements.nodeNoteInput.disabled = true;
+  elements.nodeColorInput.disabled = true;
+  elements.nodeLinkInput.disabled = true;
+  elements.addCategoryButton.disabled = true;
+  elements.saveCategoryButton.disabled = true;
+  elements.deleteCategoryButton.disabled = true;
+  elements.parentNodeDisplay.textContent = "親ノード: なし";
+  elements.childNodeDisplay.textContent = "子ノード数: 0";
+  elements.nodeTitleInput.value = "";
+  elements.nodeNoteInput.value = "";
+  elements.nodeColorInput.value = "#ffb347";
+  elements.nodeLinkInput.value = "";
+  elements.selectionStatus.textContent = "未選択";
+  elements.categorySelectionNote.textContent = "ログイン後に表示します";
+  elements.categoryEditorNote.textContent = "ログイン後に表示します";
+  elements.nodeCategoryList.innerHTML = `<span class="helper-note">ログイン後に表示します</span>`;
+  elements.categoryManagerList.innerHTML = `<span class="helper-note">ログイン後に表示します</span>`;
+  elements.categoryNameInput.value = "";
+  elements.categoryNameInput.disabled = true;
+  elements.categoryColorInput.disabled = true;
 }
 
 function renderCategoryChips(selectedNodes) {
