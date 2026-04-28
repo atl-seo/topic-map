@@ -2,7 +2,6 @@ const STORAGE_KEY = "seo-topic-map-state-v2";
 const LEGACY_STORAGE_KEY = "mind-garden-state-v1";
 const ONLINE_DOC_STORAGE_KEY = "seo-topic-map-online-doc-id";
 const ONLINE_PASSCODE_STORAGE_KEY = "seo-topic-map-passcode-ok";
-const ONLINE_PASSCODE = "3141";
 const SUPABASE_URL = "https://ztmypwifpmevuqijxypj.supabase.co";
 const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inp0bXlwd2lmcG1ldnVxaWp4eXBqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzczNDIwMzYsImV4cCI6MjA5MjkxODAzNn0.kGvYx9J1by_SZjxWHuHVOrO1kc3ysEsBP4MoraRpgQE";
 const SUPABASE_TABLE = "mindmap_documents";
@@ -2054,9 +2053,30 @@ function applyAuthSession(session) {
   loadInitialOnlineTargetIfReady();
 }
 
-function unlockOnlineFeatures() {
-  if (elements.passcodeInput.value.trim() !== ONLINE_PASSCODE) {
+async function unlockOnlineFeatures() {
+  const passcode = elements.passcodeInput.value.trim();
+  if (!passcode) {
+    alert("社内パスコードを入力してください。");
+    return;
+  }
+
+  elements.saveStatus.textContent = "パスコード確認中...";
+
+  let isValid = false;
+  try {
+    isValid = await supabaseRpc("verify_internal_passcode", {
+      p_passcode: passcode,
+    });
+  } catch (error) {
+    console.error(error);
+    alert(`パスコードの確認に失敗しました。\n\n${error.message}`);
+    elements.saveStatus.textContent = "パスコード確認失敗";
+    return;
+  }
+
+  if (!isValid) {
     alert("社内パスコードが違います。");
+    elements.saveStatus.textContent = "パスコードが違います";
     return;
   }
 
