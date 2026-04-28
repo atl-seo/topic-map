@@ -367,6 +367,44 @@ button.danger {
   background-size: 28px 28px, 28px 28px, cover;
   cursor: crosshair;
   overscroll-behavior: none;
+  touch-action: none;
+}
+
+.workspace-locked {
+  margin: 1rem;
+  flex: 1;
+  display: grid;
+  place-items: center;
+  border-radius: 24px;
+  border: 1px dashed rgba(143, 74, 36, 0.24);
+  background:
+    linear-gradient(rgba(128, 104, 88, 0.07) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(128, 104, 88, 0.07) 1px, transparent 1px),
+    rgba(255, 251, 247, 0.82);
+  background-size: 28px 28px, 28px 28px, cover;
+}
+
+.workspace-locked[hidden] {
+  display: none;
+}
+
+.workspace-locked__inner {
+  width: min(520px, calc(100% - 2rem));
+  padding: 2rem;
+  border-radius: 18px;
+  background: rgba(255, 252, 247, 0.94);
+  box-shadow: var(--shadow);
+  text-align: center;
+}
+
+.workspace-locked__inner h2 {
+  margin: 0.35rem 0 0.75rem;
+}
+
+.workspace-locked__inner p:last-child {
+  margin-bottom: 0;
+  color: var(--muted);
+  line-height: 1.7;
 }
 
 .canvas-shell.is-panning {

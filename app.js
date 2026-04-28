@@ -40,11 +40,14 @@ const historyState = {
   future: [],
 };
 
+const touchPointers = new Map();
+
 const elements = {
   canvasShell: document.getElementById("canvas-shell"),
   canvasContent: document.getElementById("canvas-content"),
   connections: document.getElementById("connections"),
   nodesLayer: document.getElementById("nodes-layer"),
+  workspaceLocked: document.getElementById("workspace-locked"),
   nodeTemplate: document.getElementById("node-template"),
   workspaceTitle: document.getElementById("workspace-title"),
   folderNameInput: document.getElementById("folder-name-input"),
@@ -1225,6 +1228,9 @@ function syncCategoryEditor(editingCategory) {
 
 function renderCanvasShellState() {
   elements.canvasShell.classList.toggle("is-panning", state.drag?.type === "pan");
+  const isWorkspaceUnlocked = state.onlineUnlocked && Boolean(state.user);
+  elements.canvasShell.hidden = !isWorkspaceUnlocked;
+  elements.workspaceLocked.hidden = isWorkspaceUnlocked;
 }
 
 function handleCanvasMouseDown(event) {
@@ -1234,6 +1240,11 @@ function handleCanvasMouseDown(event) {
 }
 
 function startCanvasInteraction(event) {
+  if (event.pointerType === "touch") {
+    startTouchCanvasInteraction(event);
+    return;
+  }
+
   const isMiddleButtonPan = event.button === 1;
   const isPrimaryButton = event.button === 0;
 
@@ -1273,6 +1284,53 @@ function startCanvasInteraction(event) {
   };
   elements.canvasShell.setPointerCapture(event.pointerId);
   renderConnections();
+}
+
+function startTouchCanvasInteraction(event) {
+  const map = getActiveMap();
+  if (!map) {
+    return;
+  }
+
+  event.preventDefault();
+  touchPointers.set(event.pointerId, {
+    clientX: event.clientX,
+    clientY: event.clientY,
+  });
+
+  if (touchPointers.size === 1) {
+    const point = getTouchPoints()[0];
+    state.drag = {
+      type: "touch-pan",
+      pointerId: event.pointerId,
+      startClientX: point.clientX,
+      startClientY: point.clientY,
+      originalX: map.viewport.x,
+      originalY: map.viewport.y,
+      moved: false,
+    };
+    elements.canvasShell.setPointerCapture(event.pointerId);
+    renderCanvasShellState();
+    return;
+  }
+
+  if (touchPointers.size === 2) {
+    const points = getTouchPoints();
+    const midpoint = getTouchMidpoint(points);
+    state.drag = {
+      type: "touch-pinch",
+      startDistance: getTouchDistance(points),
+      startMidpoint: midpoint,
+      originalScale: map.viewport.scale,
+      originalX: map.viewport.x,
+      originalY: map.viewport.y,
+      worldX: (midpoint.clientX - map.viewport.x) / map.viewport.scale,
+      worldY: (midpoint.clientY - map.viewport.y) / map.viewport.scale,
+      moved: false,
+    };
+    elements.canvasShell.setPointerCapture(event.pointerId);
+    renderCanvasShellState();
+  }
 }
 
 function handleNodePointerDown(event, nodeId) {
@@ -1321,6 +1379,12 @@ function beginConnectorDrag(event, nodeId) {
 
 function handlePointerMove(event) {
   const drag = state.drag;
+
+  if (event.pointerType === "touch") {
+    handleTouchPointerMove(event);
+    return;
+  }
+
   if (!drag || drag.pointerId !== event.pointerId) {
     return;
   }
@@ -1377,7 +1441,56 @@ function handlePointerMove(event) {
   }
 }
 
+function handleTouchPointerMove(event) {
+  if (!touchPointers.has(event.pointerId)) {
+    return;
+  }
+
+  event.preventDefault();
+  touchPointers.set(event.pointerId, {
+    clientX: event.clientX,
+    clientY: event.clientY,
+  });
+
+  const map = getActiveMap();
+  const drag = state.drag;
+  if (!map || !drag) {
+    return;
+  }
+
+  if (drag.type === "touch-pan" && touchPointers.size === 1) {
+    const point = getTouchPoints()[0];
+    map.viewport.x = drag.originalX + (point.clientX - drag.startClientX);
+    map.viewport.y = drag.originalY + (point.clientY - drag.startClientY);
+    drag.moved = true;
+    renderViewport();
+    renderConnections();
+    return;
+  }
+
+  if (drag.type === "touch-pinch" && touchPointers.size >= 2) {
+    const points = getTouchPoints().slice(0, 2);
+    const midpoint = getTouchMidpoint(points);
+    const nextScale = clamp(
+      drag.originalScale * (getTouchDistance(points) / drag.startDistance),
+      MIN_SCALE,
+      MAX_SCALE,
+    );
+    map.viewport.scale = nextScale;
+    map.viewport.x = midpoint.clientX - drag.worldX * nextScale;
+    map.viewport.y = midpoint.clientY - drag.worldY * nextScale;
+    drag.moved = true;
+    renderViewport();
+    renderConnections();
+  }
+}
+
 function finishPointerAction(event) {
+  if (event.pointerType === "touch") {
+    finishTouchPointerAction(event);
+    return;
+  }
+
   const drag = state.drag;
   if (!drag || drag.pointerId !== event.pointerId) {
     return;
@@ -1408,6 +1521,37 @@ function finishPointerAction(event) {
 
   if (didChange) {
     persistState("変更を保存しました");
+  }
+}
+
+function finishTouchPointerAction(event) {
+  const drag = state.drag;
+  touchPointers.delete(event.pointerId);
+
+  if (touchPointers.size === 1) {
+    const map = getActiveMap();
+    const point = getTouchPoints()[0];
+    if (map && point) {
+      state.drag = {
+        type: "touch-pan",
+        pointerId: Number(touchPointers.keys().next().value),
+        startClientX: point.clientX,
+        startClientY: point.clientY,
+        originalX: map.viewport.x,
+        originalY: map.viewport.y,
+        moved: false,
+      };
+      renderCanvasShellState();
+      return;
+    }
+  }
+
+  const didChange = Boolean(drag?.moved);
+  state.drag = null;
+  render();
+
+  if (didChange) {
+    persistState("表示位置を保存しました");
   }
 }
 
@@ -1998,6 +2142,25 @@ function getNormalizedRect(start, end) {
 
 function getRectDistance(start, end) {
   return Math.hypot(end.x - start.x, end.y - start.y);
+}
+
+function getTouchPoints() {
+  return [...touchPointers.values()];
+}
+
+function getTouchDistance(points) {
+  return Math.hypot(
+    points[0].clientX - points[1].clientX,
+    points[0].clientY - points[1].clientY,
+  );
+}
+
+function getTouchMidpoint(points) {
+  const rect = elements.canvasShell.getBoundingClientRect();
+  return {
+    clientX: ((points[0].clientX + points[1].clientX) / 2) - rect.left,
+    clientY: ((points[0].clientY + points[1].clientY) / 2) - rect.top,
+  };
 }
 
 function getEdgeKey(parentId, childId) {
