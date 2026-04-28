@@ -1,6 +1,8 @@
 const STORAGE_KEY = "seo-topic-map-state-v2";
 const LEGACY_STORAGE_KEY = "mind-garden-state-v1";
 const ONLINE_DOC_STORAGE_KEY = "seo-topic-map-online-doc-id";
+const ONLINE_PASSCODE_STORAGE_KEY = "seo-topic-map-passcode-ok";
+const ONLINE_PASSCODE = "3141";
 const SUPABASE_URL = "https://ztmypwifpmevuqijxypj.supabase.co";
 const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inp0bXlwd2lmcG1ldnVxaWp4eXBqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzczNDIwMzYsImV4cCI6MjA5MjkxODAzNn0.kGvYx9J1by_SZjxWHuHVOrO1kc3ysEsBP4MoraRpgQE";
 const SUPABASE_TABLE = "mindmap_documents";
@@ -26,6 +28,8 @@ const state = {
   onlineDocId: null,
   onlineShareToken: null,
   onlineLoadMode: null,
+  onlineLoadedTarget: null,
+  onlineUnlocked: false,
   user: null,
   keyboard: {
     spacePressed: false,
@@ -47,6 +51,8 @@ const elements = {
   folderNameInput: document.getElementById("folder-name-input"),
   mapNameInput: document.getElementById("map-name-input"),
   authStatus: document.getElementById("auth-status"),
+  passcodeInput: document.getElementById("passcode-input"),
+  unlockOnlineButton: document.getElementById("unlock-online-btn"),
   authEmailInput: document.getElementById("auth-email-input"),
   loginButton: document.getElementById("login-btn"),
   logoutButton: document.getElementById("logout-btn"),
@@ -97,14 +103,15 @@ initialize();
 async function initialize() {
   hydrateState();
   hydrateOnlineTarget();
+  state.onlineUnlocked = sessionStorage.getItem(ONLINE_PASSCODE_STORAGE_KEY) === "true";
   resetHistory();
   bindEvents();
   render();
   await restoreAuthSession();
 
-  if (state.onlineShareToken) {
+  if (state.onlineUnlocked && state.onlineShareToken) {
     loadSharedOnlineDocument(state.onlineShareToken);
-  } else if (state.onlineDocId) {
+  } else if (state.onlineUnlocked && state.onlineDocId) {
     loadOnlineDocument(state.onlineDocId);
   }
 }
@@ -127,6 +134,12 @@ function bindEvents() {
 
   elements.loginButton.addEventListener("click", sendLoginLink);
   elements.logoutButton.addEventListener("click", signOutOnline);
+  elements.unlockOnlineButton.addEventListener("click", unlockOnlineFeatures);
+  elements.passcodeInput.addEventListener("keydown", (event) => {
+    if (event.key === "Enter") {
+      unlockOnlineFeatures();
+    }
+  });
   elements.folderList.addEventListener("click", handleFolderListClick);
   elements.mapList.addEventListener("click", handleMapListClick);
 
@@ -883,6 +896,19 @@ function render() {
   renderConnections();
   renderInspector();
   renderCanvasShellState();
+  renderOnlineAccessState();
+}
+
+function renderOnlineAccessState() {
+  elements.passcodeInput.disabled = state.onlineUnlocked;
+  elements.unlockOnlineButton.disabled = state.onlineUnlocked;
+  elements.unlockOnlineButton.textContent = state.onlineUnlocked ? "オンライン機能解除済み" : "オンライン機能を解除";
+  elements.authEmailInput.disabled = !state.onlineUnlocked || Boolean(state.user);
+  elements.loginButton.disabled = !state.onlineUnlocked || Boolean(state.user);
+  elements.logoutButton.disabled = !state.user;
+  elements.saveOnlineButton.disabled = !state.onlineUnlocked || !state.user;
+  elements.loadOnlineButton.disabled = !state.onlineUnlocked;
+  elements.shareOnlineButton.disabled = !state.onlineUnlocked || !state.user;
 }
 
 function renderWorkspaceManager() {
@@ -2024,11 +2050,53 @@ function applyAuthSession(session) {
   elements.authStatus.textContent = state.user
     ? `ログイン中: ${state.user.email ?? state.user.id}`
     : "未ログイン";
-  elements.loginButton.disabled = Boolean(state.user);
-  elements.logoutButton.disabled = !state.user;
+  renderOnlineAccessState();
+  loadInitialOnlineTargetIfReady();
+}
+
+function unlockOnlineFeatures() {
+  if (elements.passcodeInput.value.trim() !== ONLINE_PASSCODE) {
+    alert("社内パスコードが違います。");
+    return;
+  }
+
+  state.onlineUnlocked = true;
+  sessionStorage.setItem(ONLINE_PASSCODE_STORAGE_KEY, "true");
+  elements.passcodeInput.value = "";
+  elements.saveStatus.textContent = "オンライン機能を解除しました";
+  renderOnlineAccessState();
+  loadInitialOnlineTargetIfReady();
+}
+
+function requireOnlineUnlocked() {
+  if (state.onlineUnlocked) {
+    return true;
+  }
+
+  alert("先に社内パスコードを入力して、オンライン機能を解除してください。");
+  return false;
+}
+
+function loadInitialOnlineTargetIfReady() {
+  if (!state.onlineUnlocked || !state.user) {
+    return;
+  }
+
+  if (state.onlineShareToken && state.onlineLoadedTarget !== `share:${state.onlineShareToken}`) {
+    loadSharedOnlineDocument(state.onlineShareToken);
+    return;
+  }
+
+  if (state.onlineDocId && state.onlineLoadedTarget !== `doc:${state.onlineDocId}`) {
+    loadOnlineDocument(state.onlineDocId);
+  }
 }
 
 async function sendLoginLink() {
+  if (!requireOnlineUnlocked()) {
+    return;
+  }
+
   if (!supabaseClient) {
     alert("Supabase Authを読み込めませんでした。ネットワーク接続を確認してください。");
     return;
@@ -2076,6 +2144,10 @@ async function getSupabaseAccessToken() {
 }
 
 async function saveOnlineDocument() {
+  if (!requireOnlineUnlocked()) {
+    return;
+  }
+
   if (!state.user) {
     alert("オンライン保存にはログインが必要です。メールアドレスを入力してログインリンクを送信してください。");
     return;
@@ -2138,7 +2210,11 @@ async function saveOnlineDocument() {
 }
 
 async function promptLoadOnlineDocument() {
-  const input = prompt("共有URL、共有トークン、または自分のドキュメントIDを入力してください。", state.onlineShareToken ?? state.onlineDocId ?? "");
+  if (!requireOnlineUnlocked()) {
+    return;
+  }
+
+  const input = prompt("共有URLまたはドキュメントIDを入力してください。", state.onlineShareToken ?? state.onlineDocId ?? "");
   const target = parseOnlineTarget(input);
   if (!target.value) {
     return;
@@ -2152,8 +2228,12 @@ async function promptLoadOnlineDocument() {
 }
 
 async function loadOnlineDocument(docId) {
+  if (!requireOnlineUnlocked()) {
+    return;
+  }
+
   if (!state.user) {
-    alert("自分のオンラインマップを読み込むにはログインが必要です。共有URLはログインなしで読み込めます。");
+    alert("オンラインマップを読み込むにはログインが必要です。");
     return;
   }
 
@@ -2170,6 +2250,7 @@ async function loadOnlineDocument(docId) {
 
     applyDataSnapshot(normalizeData(documentRecord.data));
     setOnlineDocumentId(documentRecord.id);
+    state.onlineLoadedTarget = `doc:${documentRecord.id}`;
     resetHistory();
     saveSnapshotSilently();
     render();
@@ -2182,6 +2263,15 @@ async function loadOnlineDocument(docId) {
 }
 
 async function loadSharedOnlineDocument(shareToken) {
+  if (!requireOnlineUnlocked()) {
+    return;
+  }
+
+  if (!state.user) {
+    alert("共有マップの読み込みにはログインが必要です。");
+    return;
+  }
+
   elements.saveStatus.textContent = "共有マップ読込中...";
 
   try {
@@ -2195,6 +2285,7 @@ async function loadSharedOnlineDocument(shareToken) {
 
     applyDataSnapshot(normalizeData(documentRecord.data));
     setSharedOnlineToken(shareToken);
+    state.onlineLoadedTarget = `share:${shareToken}`;
     resetHistory();
     saveSnapshotSilently();
     render();
@@ -2207,6 +2298,10 @@ async function loadSharedOnlineDocument(shareToken) {
 }
 
 async function copyOnlineShareLink() {
+  if (!requireOnlineUnlocked()) {
+    return;
+  }
+
   if (!state.onlineDocId) {
     await saveOnlineDocument();
   }
@@ -2216,15 +2311,7 @@ async function copyOnlineShareLink() {
   }
 
   try {
-    const rows = await supabaseRequest(`${SUPABASE_TABLE}?id=eq.${encodeURIComponent(state.onlineDocId)}&select=share_token`, {
-      method: "GET",
-    });
-    const shareToken = Array.isArray(rows) ? rows[0]?.share_token : null;
-    if (!shareToken) {
-      throw new Error("共有トークンを取得できませんでした。");
-    }
-
-    const shareUrl = buildOnlineShareUrl(shareToken);
+    const shareUrl = buildOwnerOnlineUrl(state.onlineDocId);
     try {
       await navigator.clipboard.writeText(shareUrl);
       elements.saveStatus.textContent = "共有リンクをコピーしました";
@@ -2308,7 +2395,7 @@ function parseOnlineTarget(value) {
     // Plain IDs are treated as share tokens first because they are safer to pass around.
   }
 
-  return { type: "share", value: text };
+  return { type: "doc", value: text };
 }
 
 function buildOwnerOnlineUrl(docId) {
