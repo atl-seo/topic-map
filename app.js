@@ -902,6 +902,7 @@ function render() {
 }
 
 function renderOnlineAccessState() {
+  const isWorkspaceUnlocked = state.onlineUnlocked && Boolean(state.user);
   elements.passcodeInput.disabled = state.onlineUnlocked;
   elements.unlockOnlineButton.disabled = state.onlineUnlocked;
   elements.unlockOnlineButton.textContent = state.onlineUnlocked ? "オンライン機能解除済み" : "オンライン機能を解除";
@@ -911,6 +912,10 @@ function renderOnlineAccessState() {
   elements.saveOnlineButton.disabled = !state.onlineUnlocked || !state.user;
   elements.loadOnlineButton.disabled = !state.onlineUnlocked;
   elements.shareOnlineButton.disabled = !state.onlineUnlocked || !state.user;
+
+  if (!isWorkspaceUnlocked) {
+    elements.selectionStatus.textContent = "未選択";
+  }
 }
 
 function renderWorkspaceManager() {
