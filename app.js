@@ -53,8 +53,10 @@ const elements = {
   authStatus: document.getElementById("auth-status"),
   passcodeInput: document.getElementById("passcode-input"),
   authEmailInput: document.getElementById("auth-email-input"),
+  newPasswordInput: document.getElementById("new-password-input"),
   loginButton: document.getElementById("login-btn"),
   logoutButton: document.getElementById("logout-btn"),
+  updatePasswordButton: document.getElementById("update-password-btn"),
   folderList: document.getElementById("folder-list"),
   mapList: document.getElementById("map-list"),
   newFolderButton: document.getElementById("new-folder-btn"),
@@ -134,9 +136,15 @@ function bindEvents() {
 
   elements.loginButton.addEventListener("click", signInWithPassword);
   elements.logoutButton.addEventListener("click", signOutOnline);
+  elements.updatePasswordButton.addEventListener("click", updateOnlinePassword);
   elements.passcodeInput.addEventListener("keydown", (event) => {
     if (event.key === "Enter") {
       signInWithPassword();
+    }
+  });
+  elements.newPasswordInput.addEventListener("keydown", (event) => {
+    if (event.key === "Enter") {
+      updateOnlinePassword();
     }
   });
   elements.folderList.addEventListener("click", handleFolderListClick);
@@ -904,6 +912,8 @@ function renderOnlineAccessState() {
   elements.authEmailInput.disabled = Boolean(state.user);
   elements.loginButton.disabled = Boolean(state.user);
   elements.logoutButton.disabled = !state.user;
+  elements.newPasswordInput.disabled = !state.user;
+  elements.updatePasswordButton.disabled = !state.user;
   elements.saveOnlineButton.disabled = !state.user;
   elements.loadOnlineButton.disabled = !state.user;
   elements.shareOnlineButton.disabled = !state.user;
@@ -2287,6 +2297,33 @@ async function signOutOnline() {
 
   await supabaseClient.auth.signOut();
   elements.saveStatus.textContent = "ログアウトしました";
+}
+
+async function updateOnlinePassword() {
+  if (!supabaseClient || !state.user) {
+    alert("パスワード更新には、リセットメールのリンクからログインしている必要があります。");
+    return;
+  }
+
+  const password = elements.newPasswordInput.value.trim();
+  if (!password) {
+    alert("新しいパスワードを入力してください。");
+    return;
+  }
+
+  elements.saveStatus.textContent = "パスワード更新中...";
+  const { error } = await supabaseClient.auth.updateUser({
+    password,
+  });
+
+  if (error) {
+    alert(`パスワード更新に失敗しました。\n\n${error.message}`);
+    elements.saveStatus.textContent = "パスワード更新失敗";
+    return;
+  }
+
+  elements.newPasswordInput.value = "";
+  elements.saveStatus.textContent = "パスワードを更新しました";
 }
 
 async function getSupabaseAccessToken() {
