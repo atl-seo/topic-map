@@ -946,7 +946,10 @@ function renderWorkspaceManager() {
 function renderWorkspaceTitle() {
   const folder = getActiveFolder();
   const map = getActiveMap();
-  elements.workspaceTitle.textContent = map ? `${folder.name} / ${map.name}` : "SEOトピック管理マップ";
+  const canShowMapName = state.onlineUnlocked && Boolean(state.user);
+  elements.workspaceTitle.textContent = canShowMapName && map
+    ? `${folder.name} / ${map.name}`
+    : "アクティブマップ";
 }
 
 function renderViewport() {
@@ -2209,9 +2212,7 @@ async function restoreAuthSession() {
 
 function applyAuthSession(session) {
   state.user = session?.user ?? null;
-  elements.authStatus.textContent = state.user
-    ? `ログイン中: ${state.user.email ?? state.user.id}`
-    : "未ログイン";
+  elements.authStatus.textContent = state.user ? "ログイン済み" : "未ログイン";
   renderOnlineAccessState();
   loadInitialOnlineTargetIfReady();
 }
