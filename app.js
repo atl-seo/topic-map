@@ -1,10 +1,9 @@
 const STORAGE_KEY = "seo-topic-map-state-v2";
 const LEGACY_STORAGE_KEY = "mind-garden-state-v1";
-const ONLINE_DOC_STORAGE_KEY = "seo-topic-map-online-doc-id";
-const ONLINE_PASSCODE_STORAGE_KEY = "seo-topic-map-passcode-ok";
 const SUPABASE_URL = "https://ztmypwifpmevuqijxypj.supabase.co";
 const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inp0bXlwd2lmcG1ldnVxaWp4eXBqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzczNDIwMzYsImV4cCI6MjA5MjkxODAzNn0.kGvYx9J1by_SZjxWHuHVOrO1kc3ysEsBP4MoraRpgQE";
 const SUPABASE_TABLE = "mindmap_documents";
+const TEAM_DOCUMENT_SLUG = "team-default";
 const NODE_WIDTH = 248;
 const NODE_HEIGHT = 160;
 const MIN_SCALE = 0.18;
@@ -28,7 +27,6 @@ const state = {
   onlineShareToken: null,
   onlineLoadMode: null,
   onlineLoadedTarget: null,
-  onlineUnlocked: false,
   user: null,
   keyboard: {
     spacePressed: false,
@@ -54,7 +52,6 @@ const elements = {
   mapNameInput: document.getElementById("map-name-input"),
   authStatus: document.getElementById("auth-status"),
   passcodeInput: document.getElementById("passcode-input"),
-  unlockOnlineButton: document.getElementById("unlock-online-btn"),
   authEmailInput: document.getElementById("auth-email-input"),
   loginButton: document.getElementById("login-btn"),
   logoutButton: document.getElementById("logout-btn"),
@@ -105,16 +102,17 @@ initialize();
 async function initialize() {
   hydrateState();
   hydrateOnlineTarget();
-  state.onlineUnlocked = sessionStorage.getItem(ONLINE_PASSCODE_STORAGE_KEY) === "true";
   resetHistory();
   bindEvents();
   render();
   await restoreAuthSession();
 
-  if (state.onlineUnlocked && state.onlineShareToken) {
+  if (state.user && state.onlineShareToken) {
     loadSharedOnlineDocument(state.onlineShareToken);
-  } else if (state.onlineUnlocked && state.onlineDocId) {
+  } else if (state.user && state.onlineDocId) {
     loadOnlineDocument(state.onlineDocId);
+  } else if (state.user) {
+    loadTeamOnlineDocument();
   }
 }
 
@@ -134,12 +132,11 @@ function bindEvents() {
     renameActiveMap(event.target.value.trim());
   });
 
-  elements.loginButton.addEventListener("click", sendLoginLink);
+  elements.loginButton.addEventListener("click", signInWithPassword);
   elements.logoutButton.addEventListener("click", signOutOnline);
-  elements.unlockOnlineButton.addEventListener("click", unlockOnlineFeatures);
   elements.passcodeInput.addEventListener("keydown", (event) => {
     if (event.key === "Enter") {
-      unlockOnlineFeatures();
+      signInWithPassword();
     }
   });
   elements.folderList.addEventListener("click", handleFolderListClick);
@@ -902,16 +899,14 @@ function render() {
 }
 
 function renderOnlineAccessState() {
-  const isWorkspaceUnlocked = state.onlineUnlocked && Boolean(state.user);
-  elements.passcodeInput.disabled = state.onlineUnlocked;
-  elements.unlockOnlineButton.disabled = state.onlineUnlocked;
-  elements.unlockOnlineButton.textContent = state.onlineUnlocked ? "オンライン機能解除済み" : "オンライン機能を解除";
-  elements.authEmailInput.disabled = !state.onlineUnlocked || Boolean(state.user);
-  elements.loginButton.disabled = !state.onlineUnlocked || Boolean(state.user);
+  const isWorkspaceUnlocked = Boolean(state.user);
+  elements.passcodeInput.disabled = Boolean(state.user);
+  elements.authEmailInput.disabled = Boolean(state.user);
+  elements.loginButton.disabled = Boolean(state.user);
   elements.logoutButton.disabled = !state.user;
-  elements.saveOnlineButton.disabled = !state.onlineUnlocked || !state.user;
-  elements.loadOnlineButton.disabled = !state.onlineUnlocked;
-  elements.shareOnlineButton.disabled = !state.onlineUnlocked || !state.user;
+  elements.saveOnlineButton.disabled = !state.user;
+  elements.loadOnlineButton.disabled = !state.user;
+  elements.shareOnlineButton.disabled = !state.user;
 
   if (!isWorkspaceUnlocked) {
     elements.selectionStatus.textContent = "未選択";
@@ -951,7 +946,7 @@ function renderWorkspaceManager() {
 function renderWorkspaceTitle() {
   const folder = getActiveFolder();
   const map = getActiveMap();
-  const canShowMapName = state.onlineUnlocked && Boolean(state.user);
+  const canShowMapName = Boolean(state.user);
   elements.workspaceTitle.textContent = canShowMapName && map
     ? `${folder.name} / ${map.name}`
     : "アクティブマップ";
@@ -1236,7 +1231,7 @@ function syncCategoryEditor(editingCategory) {
 
 function renderCanvasShellState() {
   elements.canvasShell.classList.toggle("is-panning", state.drag?.type === "pan");
-  const isWorkspaceUnlocked = state.onlineUnlocked && Boolean(state.user);
+  const isWorkspaceUnlocked = Boolean(state.user);
   elements.canvasShell.hidden = !isWorkspaceUnlocked;
   elements.workspaceLocked.hidden = isWorkspaceUnlocked;
 }
@@ -2197,7 +2192,7 @@ function hydrateOnlineTarget() {
   state.onlineShareToken = params.get("share");
   state.onlineDocId = state.onlineShareToken
     ? null
-    : params.get("doc") || localStorage.getItem(ONLINE_DOC_STORAGE_KEY) || null;
+    : params.get("doc");
   state.onlineLoadMode = state.onlineShareToken ? "shared" : state.onlineDocId ? "owner" : null;
 }
 
@@ -2222,52 +2217,17 @@ function applyAuthSession(session) {
   loadInitialOnlineTargetIfReady();
 }
 
-async function unlockOnlineFeatures() {
-  const passcode = elements.passcodeInput.value.trim();
-  if (!passcode) {
-    alert("社内パスコードを入力してください。");
-    return;
-  }
-
-  elements.saveStatus.textContent = "パスコード確認中...";
-
-  let isValid = false;
-  try {
-    isValid = await supabaseRpc("verify_internal_passcode", {
-      p_passcode: passcode,
-    });
-  } catch (error) {
-    console.error(error);
-    alert(`パスコードの確認に失敗しました。\n\n${error.message}`);
-    elements.saveStatus.textContent = "パスコード確認失敗";
-    return;
-  }
-
-  if (!isValid) {
-    alert("社内パスコードが違います。");
-    elements.saveStatus.textContent = "パスコードが違います";
-    return;
-  }
-
-  state.onlineUnlocked = true;
-  sessionStorage.setItem(ONLINE_PASSCODE_STORAGE_KEY, "true");
-  elements.passcodeInput.value = "";
-  elements.saveStatus.textContent = "オンライン機能を解除しました";
-  renderOnlineAccessState();
-  loadInitialOnlineTargetIfReady();
-}
-
-function requireOnlineUnlocked() {
-  if (state.onlineUnlocked) {
+function requireOnlineSignedIn() {
+  if (state.user) {
     return true;
   }
 
-  alert("先に社内パスコードを入力して、オンライン機能を解除してください。");
+  alert("先にメールアドレスとパスワードでログインしてください。");
   return false;
 }
 
 function loadInitialOnlineTargetIfReady() {
-  if (!state.onlineUnlocked || !state.user) {
+  if (!state.user) {
     return;
   }
 
@@ -2278,14 +2238,15 @@ function loadInitialOnlineTargetIfReady() {
 
   if (state.onlineDocId && state.onlineLoadedTarget !== `doc:${state.onlineDocId}`) {
     loadOnlineDocument(state.onlineDocId);
-  }
-}
-
-async function sendLoginLink() {
-  if (!requireOnlineUnlocked()) {
     return;
   }
 
+  if (!state.onlineDocId && state.onlineLoadedTarget !== `team:${TEAM_DOCUMENT_SLUG}`) {
+    loadTeamOnlineDocument();
+  }
+}
+
+async function signInWithPassword() {
   if (!supabaseClient) {
     alert("Supabase Authを読み込めませんでした。ネットワーク接続を確認してください。");
     return;
@@ -2297,21 +2258,26 @@ async function sendLoginLink() {
     return;
   }
 
-  elements.saveStatus.textContent = "ログインリンク送信中...";
-  const { error } = await supabaseClient.auth.signInWithOtp({
-    email,
-    options: {
-      emailRedirectTo: window.location.href,
-    },
-  });
-
-  if (error) {
-    alert(`ログインリンクの送信に失敗しました。\n\n${error.message}`);
-    elements.saveStatus.textContent = "ログイン送信失敗";
+  const password = elements.passcodeInput.value.trim();
+  if (!password) {
+    alert("パスワードを入力してください。");
     return;
   }
 
-  elements.saveStatus.textContent = "ログインリンクを送信しました";
+  elements.saveStatus.textContent = "ログイン中...";
+  const { error } = await supabaseClient.auth.signInWithPassword({
+    email,
+    password,
+  });
+
+  if (error) {
+    alert(`ログインに失敗しました。\n\n${error.message}`);
+    elements.saveStatus.textContent = "ログイン失敗";
+    return;
+  }
+
+  elements.passcodeInput.value = "";
+  elements.saveStatus.textContent = "ログインしました";
 }
 
 async function signOutOnline() {
@@ -2333,12 +2299,7 @@ async function getSupabaseAccessToken() {
 }
 
 async function saveOnlineDocument() {
-  if (!requireOnlineUnlocked()) {
-    return;
-  }
-
-  if (!state.user) {
-    alert("オンライン保存にはログインが必要です。メールアドレスを入力してログインリンクを送信してください。");
+  if (!requireOnlineSignedIn()) {
     return;
   }
 
@@ -2360,6 +2321,7 @@ async function saveOnlineDocument() {
     const payload = {
       title,
       data: snapshot,
+      slug: TEAM_DOCUMENT_SLUG,
       updated_at: new Date().toISOString(),
     };
 
@@ -2369,14 +2331,14 @@ async function saveOnlineDocument() {
         body: JSON.stringify(payload),
         prefer: "return=representation",
       })
-      : await supabaseRequest(`${SUPABASE_TABLE}?select=id,title`, {
-        method: "POST",
+      : await supabaseRequest(`${SUPABASE_TABLE}?slug=eq.${encodeURIComponent(TEAM_DOCUMENT_SLUG)}&select=id,title`, {
+        method: "PATCH",
         body: JSON.stringify(payload),
         prefer: "return=representation",
       });
 
     let savedDocument = Array.isArray(rows) ? rows[0] : null;
-    if (state.onlineDocId && !savedDocument) {
+    if (!savedDocument) {
       rows = await supabaseRequest(`${SUPABASE_TABLE}?select=id,title`, {
         method: "POST",
         body: JSON.stringify(payload),
@@ -2399,13 +2361,14 @@ async function saveOnlineDocument() {
 }
 
 async function promptLoadOnlineDocument() {
-  if (!requireOnlineUnlocked()) {
+  if (!requireOnlineSignedIn()) {
     return;
   }
 
-  const input = prompt("共有URLまたはドキュメントIDを入力してください。", state.onlineShareToken ?? state.onlineDocId ?? "");
+  const input = prompt("共有URLまたはドキュメントIDを入力してください。空欄ならチームマップを読み込みます。", state.onlineShareToken ?? state.onlineDocId ?? "");
   const target = parseOnlineTarget(input);
   if (!target.value) {
+    await loadTeamOnlineDocument();
     return;
   }
 
@@ -2417,12 +2380,7 @@ async function promptLoadOnlineDocument() {
 }
 
 async function loadOnlineDocument(docId) {
-  if (!requireOnlineUnlocked()) {
-    return;
-  }
-
-  if (!state.user) {
-    alert("オンラインマップを読み込むにはログインが必要です。");
+  if (!requireOnlineSignedIn()) {
     return;
   }
 
@@ -2451,13 +2409,40 @@ async function loadOnlineDocument(docId) {
   }
 }
 
-async function loadSharedOnlineDocument(shareToken) {
-  if (!requireOnlineUnlocked()) {
+async function loadTeamOnlineDocument() {
+  if (!requireOnlineSignedIn()) {
     return;
   }
 
-  if (!state.user) {
-    alert("共有マップの読み込みにはログインが必要です。");
+  elements.saveStatus.textContent = "チームマップ読込中...";
+
+  try {
+    const rows = await supabaseRequest(`${SUPABASE_TABLE}?slug=eq.${encodeURIComponent(TEAM_DOCUMENT_SLUG)}&select=id,title,data`, {
+      method: "GET",
+    });
+    const documentRecord = Array.isArray(rows) ? rows[0] : null;
+    if (!documentRecord?.data) {
+      state.onlineLoadedTarget = `team:${TEAM_DOCUMENT_SLUG}`;
+      elements.saveStatus.textContent = "チームマップは未作成です";
+      return;
+    }
+
+    applyDataSnapshot(normalizeData(documentRecord.data));
+    setOnlineDocumentId(documentRecord.id);
+    state.onlineLoadedTarget = `team:${TEAM_DOCUMENT_SLUG}`;
+    resetHistory();
+    saveSnapshotSilently();
+    render();
+    elements.saveStatus.textContent = "チームマップを読み込みました";
+  } catch (error) {
+    console.error(error);
+    alert(`チームマップの読み込みに失敗しました。\n\n${error.message}`);
+    elements.saveStatus.textContent = "チーム読込失敗";
+  }
+}
+
+async function loadSharedOnlineDocument(shareToken) {
+  if (!requireOnlineSignedIn()) {
     return;
   }
 
@@ -2487,7 +2472,7 @@ async function loadSharedOnlineDocument(shareToken) {
 }
 
 async function copyOnlineShareLink() {
-  if (!requireOnlineUnlocked()) {
+  if (!requireOnlineSignedIn()) {
     return;
   }
 
@@ -2550,7 +2535,6 @@ function setOnlineDocumentId(docId) {
   state.onlineDocId = docId;
   state.onlineShareToken = null;
   state.onlineLoadMode = "owner";
-  localStorage.setItem(ONLINE_DOC_STORAGE_KEY, docId);
   const nextUrl = buildOwnerOnlineUrl(docId);
   window.history.replaceState(null, "", nextUrl);
 }
