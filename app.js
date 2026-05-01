@@ -2286,7 +2286,9 @@ async function restoreAuthSession() {
 
 function applyAuthSession(session) {
   state.user = session?.user ?? null;
-  elements.authStatus.textContent = state.user ? "ログイン済み" : "未ログイン";
+  elements.authStatus.textContent = state.user
+    ? `ログイン中: ${state.user.email ?? state.user.id}`
+    : "未ログイン";
   renderOnlineAccessState();
   loadInitialOnlineTargetIfReady();
 }
