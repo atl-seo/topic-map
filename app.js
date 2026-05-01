@@ -2426,27 +2426,13 @@ async function saveOnlineDocument() {
       updated_at: new Date().toISOString(),
     };
 
-    let rows = state.onlineDocId
-      ? await supabaseRequest(`${SUPABASE_TABLE}?id=eq.${encodeURIComponent(state.onlineDocId)}&select=id,title`, {
-        method: "PATCH",
-        body: JSON.stringify(payload),
-        prefer: "return=representation",
-      })
-      : await supabaseRequest(`${SUPABASE_TABLE}?slug=eq.${encodeURIComponent(TEAM_DOCUMENT_SLUG)}&select=id,title`, {
-        method: "PATCH",
-        body: JSON.stringify(payload),
-        prefer: "return=representation",
-      });
+    const rows = await supabaseRequest(`${SUPABASE_TABLE}?on_conflict=slug&select=id,title`, {
+      method: "POST",
+      body: JSON.stringify(payload),
+      prefer: "resolution=merge-duplicates,return=representation",
+    });
 
-    let savedDocument = Array.isArray(rows) ? rows[0] : null;
-    if (!savedDocument) {
-      rows = await supabaseRequest(`${SUPABASE_TABLE}?select=id,title`, {
-        method: "POST",
-        body: JSON.stringify(payload),
-        prefer: "return=representation",
-      });
-      savedDocument = Array.isArray(rows) ? rows[0] : null;
-    }
+    const savedDocument = Array.isArray(rows) ? rows[0] : null;
 
     if (!savedDocument?.id) {
       throw new Error("保存結果にドキュメントIDがありません。");
